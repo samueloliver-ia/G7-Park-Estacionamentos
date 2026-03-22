@@ -88,49 +88,69 @@ export default function Entry() {
         const { data: { text } } = await worker.recognize(imageSrc);
         await worker.terminate();
 
+        // 1. Limpa de vez tudo que não for letra ou número
         const rawText = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
         
-        // 1. Procura exata por placa padrão Mercosul (AAA1A12) ou Antiga (AAA1234)
-        const strictMatch = rawText.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/);
-        
-        if (strictMatch) {
-          setPlate(formatPlate(strictMatch[0]));
-          toast.success('Placa detectada perfeitamente!', { id: 'ocr' });
-          return;
+        if (rawText.length < 7) {
+            toast.error('Não identifiquei caracteres suficientes. Digite manualmente.', { id: 'ocr' });
+            return;
         }
 
-        // 2. Fallback: Procura string de 7 caracteres mais provável
+        // 2. Usar Janela Deslizante (Sliding Window) para achar o melhor bloco de 7 posições
+        // Uma placa no BR (Antiga ou Mercosul) tem 3 letras no começo, 1 número, e 2 números no fim.
+        let bestScore = -1;
         let bestGuess = '';
-        const possiblePlates = rawText.match(/[A-Z0-9]{7}/g);
-        if (possiblePlates && possiblePlates.length > 0) {
-            bestGuess = possiblePlates.find(p => /^[A-Z]{2,3}/.test(p)) || possiblePlates[0];
-        } else if (rawText.length >= 7) {
-            bestGuess = rawText.slice(-7);
+
+        const isLetter = (c) => /[A-Z]/.test(c);
+        const isNumber = (c) => /[0-9]/.test(c);
+
+        for (let i = 0; i <= rawText.length - 7; i++) {
+           let window = rawText.substring(i, i + 7);
+           let score = 0;
+           
+           if (isLetter(window[0])) score += 1;
+           if (isLetter(window[1])) score += 1;
+           if (isLetter(window[2])) score += 1;
+           if (isNumber(window[3])) score += 1;
+           if (isLetter(window[4]) || isNumber(window[4])) score += 1; 
+           if (isNumber(window[5])) score += 1;
+           if (isNumber(window[6])) score += 1;
+
+           if (score > bestScore) {
+               bestScore = score;
+               bestGuess = window;
+           }
         }
 
-        if (bestGuess.length === 7) {
-            // Corrige confusões comuns e clássicas do OCR para placas Brasileiras
-            let corrected = '';
-            const letToNum = { 'O': '0', 'I': '1', 'Z': '2', 'S': '5', 'G': '6', 'B': '8', 'Q': '0', 'T': '1', 'A': '4' };
-            const numToLet = { '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '6': 'G', '8': 'B', '4': 'A' };
+        // 3. Aplica a Força Bruta de Correção OCR no Ganhador
+        let corrected = '';
+        const letToNum = { 'O': '0', 'I': '1', 'Z': '2', 'S': '5', 'G': '6', 'B': '8', 'Q': '0', 'T': '1', 'A': '4' };
+        const numToLet = { '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '6': 'G', '8': 'B', '4': 'A' };
 
-            for (let i = 0; i < 7; i++) {
-                let char = bestGuess[i];
-                if (i <= 2) { // AAA: Primeiros 3 sempre letras
-                   corrected += numToLet[char] || char;
-                } else if (i === 3) { // 1: 4º char sempre número
-                   corrected += letToNum[char] || char;
-                } else if (i === 4) { // A/1: 5º char letra ou numero (Mercosul/Antigo), preservamos cru
-                   corrected += char; 
-                } else { // 12: 6º e 7º char sempre numeros
-                   corrected += letToNum[char] || char;
-                }
+        for (let i = 0; i < 7; i++) {
+            let char = bestGuess[i];
+            if (i <= 2) { 
+               // Força Ser Letra nas 3 primeiras posições
+               corrected += numToLet[char] || char;
+            } else if (i === 3) { 
+               // Força Ser Número na 4º posição
+               corrected += letToNum[char] || char;
+            } else if (i === 4) { 
+               // Pode ser Letra (Mercosul) ou Número (Antiga). Preserva puramente para evitar estragar:
+               // Porem, 'O' confunde com '0', e '0' com 'O'. Geralmente Tesseract acerta a intenção do mercosul.
+               corrected += char; 
+            } else { 
+               // Força ser Número nas últimas 2
+               corrected += letToNum[char] || char;
             }
+        }
 
-            setPlate(formatPlate(corrected));
-            toast.success('Placa lida (auto-corrigida)! Confira.', { id: 'ocr' });
+        // Se o score foi péssimo (ex: lendo chão ou parede), avisa:
+        if (bestScore <= 2) {
+            toast.error('Nenhuma placa nítida encontrada. Digite manualmente.', { id: 'ocr' });
         } else {
-            toast.error('Não achei a placa exata. Digite manualmente.', { id: 'ocr' });
+            setPlate(formatPlate(corrected));
+            toast.success('Placa detectada pela nova IA.', { id: 'ocr' });
         }
       } catch (e) {
         console.error('Erro OCR:', e);
