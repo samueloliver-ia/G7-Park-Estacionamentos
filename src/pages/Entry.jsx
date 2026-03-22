@@ -70,11 +70,22 @@ export default function Entry() {
   };
 
   const capturePhoto = async () => {
-    if (videoRef.current && canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      canvasRef.current.width = videoRef.current.videoWidth;
-      canvasRef.current.height = videoRef.current.videoHeight;
-      ctx.drawImage(videoRef.current, 0, 0);
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      
+      // Matemática do recorte (Crop) exato do miolo visualizado (object-fit: cover)
+      const scale = Math.max(video.offsetWidth / video.videoWidth, video.offsetHeight / video.videoHeight);
+      const sWidth = video.offsetWidth / scale;
+      const sHeight = video.offsetHeight / scale;
+      const sX = (video.videoWidth - sWidth) / 2;
+      const sY = (video.videoHeight - sHeight) / 2;
+
+      canvas.width = video.offsetWidth;
+      canvas.height = video.offsetHeight;
+      
+      ctx.drawImage(video, sX, sY, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
       
       const stream = videoRef.current.srcObject;
       stream?.getTracks().forEach(t => t.stop());
@@ -156,7 +167,6 @@ export default function Entry() {
         console.error('Erro OCR:', e);
         toast.error('Falha no processador. Digite a placa manualmente.', { id: 'ocr' });
       }
-    }
   };
 
   if (ticket) {
@@ -252,10 +262,33 @@ export default function Entry() {
 
           {photoMode && (
             <div style={{ marginTop: '12px' }}>
-              <video ref={videoRef} autoPlay playsInline style={{ width: '100%', borderRadius: '12px', background: '#000' }} />
+              <div style={{
+                position: 'relative', width: '100%', height: '140px', overflow: 'hidden', 
+                borderRadius: '12px', background: '#000', marginBottom: '8px',
+                boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.2)'
+              }}>
+                <video ref={videoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                
+                {/* Marcador Visual Central - Moldura da placa */}
+                <div style={{
+                  position: 'absolute', top: '15%', left: '10%', right: '10%', bottom: '15%',
+                  border: '2px dashed rgba(255,255,255,0.8)',
+                  borderRadius: '8px', pointerEvents: 'none',
+                  boxShadow: '0 0 0 1000px rgba(0,0,0,0.4)', // Escurece o entorno
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', fontWeight: '600', letterSpacing: '1px' }}>
+                    CENTRALIZAR PLACA
+                  </span>
+                </div>
+              </div>
+
               <canvas ref={canvasRef} style={{ display: 'none' }} />
               <button className="btn btn-primary btn-full mt-2" onClick={capturePhoto}>
                 <Camera size={16} /> Capturar Foto
+              </button>
+              <button className="btn btn-ghost btn-full mt-2" onClick={() => { setPhotoMode(false); videoRef.current?.srcObject?.getTracks().forEach(t=>t.stop()); }}>
+                Cancelar Câmera
               </button>
             </div>
           )}
