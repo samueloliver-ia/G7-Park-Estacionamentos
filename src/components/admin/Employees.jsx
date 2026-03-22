@@ -1,0 +1,173 @@
+import React, { useState, useEffect } from 'react';
+import { useApp } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
+import { ArrowLeft, Users, Plus, Trash2, Edit2, X, Save } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+const ROLES = { admin: 'Administrador', operador: 'Operador', caixa: 'Caixa' };
+
+export default function Employees({ onBack }) {
+  const { currentUser } = useApp();
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: '', cpf: '', phone: '', email: '', role: 'operador', salary: '', hire_date: '' });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { loadEmployees(); }, []);
+
+  const loadEmployees = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('employees').select('*').eq('parking_id', currentUser.parkingId).eq('status', 'ativo').order('name');
+    setEmployees(data || []);
+    setLoading(false);
+  };
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const resetForm = () => {
+    setForm({ name: '', cpf: '', phone: '', email: '', role: 'operador', salary: '', hire_date: '' });
+    setEditing(null);
+    setShowForm(false);
+  };
+
+  const handleEdit = (emp) => {
+    setEditing(emp.id);
+    setForm({ name: emp.name, cpf: emp.cpf || '', phone: emp.phone || '', email: emp.email || '', role: emp.role, salary: emp.salary || '', hire_date: emp.hire_date || '' });
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.name) { toast.error('Nome é obrigatório!'); return; }
+    setSaving(true);
+    try {
+      if (editing) {
+        await supabase.from('employees').update({ ...form, salary: form.salary ? Number(form.salary) : null }).eq('id', editing);
+        toast.success('Funcionário atualizado!');
+      } else {
+        await supabase.from('employees').insert([{ parking_id: currentUser.parkingId, ...form, salary: form.salary ? Number(form.salary) : null }]);
+        toast.success('Funcionário cadastrado!');
+      }
+      resetForm();
+      loadEmployees();
+    } catch { toast.error('Erro ao salvar!'); } finally { setSaving(false); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Inativar este funcionário?')) return;
+    await supabase.from('employees').update({ status: 'inativo' }).eq('id', id);
+    loadEmployees();
+    toast.success('Funcionário inativado!');
+  };
+
+  const ROLE_COLORS = { admin: '#f59e0b', operador: '#4a8eff', caixa: '#10b981' };
+
+  return (
+    <div className="page-wrapper">
+      <div className="bg-animated" />
+      <div className="page-header">
+        <button onClick={onBack} className="btn btn-ghost btn-sm"><ArrowLeft size={16} /></button>
+        <Users size={20} color="#10b981" />
+        <h1 style={{ fontSize: '18px', fontWeight: '700' }}>Funcionários</h1>
+        <button onClick={() => { resetForm(); setShowForm(true); }} className="btn btn-success btn-sm" style={{ marginLeft: 'auto' }}>
+          <Plus size={16} /> Novo
+        </button>
+      </div>
+      <div className="page-content">
+        {/* Form */}
+        {showForm && (
+          <div className="card mb-4">
+            <div className="flex justify-between items-center mb-4">
+              <div className="section-title" style={{ margin: 0 }}>{editing ? 'Editar' : 'Novo'} Funcionário</div>
+              <button className="btn btn-ghost btn-sm" onClick={resetForm}><X size={16} /></button>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label">Nome *</label>
+                <input className="form-input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="Nome completo" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">CPF</label>
+                <input className="form-input" value={form.cpf} onChange={e => set('cpf', e.target.value)} placeholder="000.000.000-00" />
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label">Telefone</label>
+                <input className="form-input" value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="(00) 00000-0000" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">E-mail</label>
+                <input type="email" className="form-input" value={form.email} onChange={e => set('email', e.target.value)} placeholder="email@exemplo.com" />
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label">Função</label>
+                <select className="form-input" value={form.role} onChange={e => set('role', e.target.value)}>
+                  {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Salário (R$)</label>
+                <input type="number" step="0.01" className="form-input" value={form.salary} onChange={e => set('salary', e.target.value)} placeholder="0,00" />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Data de Contratação</label>
+              <input type="date" className="form-input" value={form.hire_date} onChange={e => set('hire_date', e.target.value)} />
+            </div>
+            <div className="flex gap-2">
+              <button className="btn btn-success btn-full" onClick={handleSave} disabled={saving}>
+                {saving ? <span className="spinner" style={{ width: '18px', height: '18px' }} /> : <><Save size={16} /> Salvar</>}
+              </button>
+              <button className="btn btn-ghost" onClick={resetForm}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {/* List */}
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}><span className="spinner" /></div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {employees.map(emp => (
+              <div key={emp.id} style={{
+                background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '14px',
+                padding: '16px', display: 'flex', alignItems: 'center', gap: '12px',
+              }}>
+                <div style={{
+                  width: '44px', height: '44px', borderRadius: '50%', flexShrink: 0,
+                  background: `${ROLE_COLORS[emp.role] || '#4a8eff'}20`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '18px', fontWeight: '800', color: ROLE_COLORS[emp.role] || '#4a8eff',
+                }}>
+                  {emp.name.charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: '700', marginBottom: '2px' }}>{emp.name}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{emp.phone || emp.email || '—'}</div>
+                </div>
+                <div style={{ textAlign: 'right', marginRight: '8px' }}>
+                  <span style={{
+                    fontSize: '11px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px',
+                    background: `${ROLE_COLORS[emp.role] || '#4a8eff'}18`, color: ROLE_COLORS[emp.role] || '#4a8eff',
+                  }}>{ROLES[emp.role]}</span>
+                  {emp.salary && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>R$ {Number(emp.salary).toFixed(2)}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(emp)}><Edit2 size={14} /></button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(emp.id)}><Trash2 size={14} color="#ef4444" /></button>
+                </div>
+              </div>
+            ))}
+            {employees.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>Nenhum funcionário cadastrado.</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
