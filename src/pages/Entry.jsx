@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { QRCodeSVG } from 'qrcode.react';
 import { ArrowLeft, Camera, Keyboard, Printer, Car, CheckCircle, Hash } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { createWorker } from 'tesseract.js';
 
 const CATEGORIES = [
   { id: 'pequeno', label: 'Pequeno', icon: '🚗', desc: 'Carros de passeio' },
@@ -68,16 +69,44 @@ export default function Entry() {
     }
   };
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (videoRef.current && canvasRef.current) {
       const ctx = canvasRef.current.getContext('2d');
       canvasRef.current.width = videoRef.current.videoWidth;
       canvasRef.current.height = videoRef.current.videoHeight;
       ctx.drawImage(videoRef.current, 0, 0);
+      
       const stream = videoRef.current.srcObject;
       stream?.getTracks().forEach(t => t.stop());
       setPhotoMode(false);
-      toast.success('Foto capturada! Digite a placa manualmente.');
+      
+      const imageSrc = canvasRef.current.toDataURL('image/jpeg');
+      toast.loading('Lendo a imagem (IA/OCR)...', { id: 'ocr' });
+
+      try {
+        const worker = await createWorker('por');
+        const { data: { text } } = await worker.recognize(imageSrc);
+        await worker.terminate();
+
+        const cleanText = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+        
+        // Expressão resiliente que tenta achar no minimo 3 letras e números depois (Padrão Antigo e Mercosul)
+        const plateMatch = cleanText.match(/[A-Z]{2,3}[A-Z0-9]{4}/);
+
+        if (plateMatch) {
+          setPlate(formatPlate(plateMatch[0].slice(0, 7)));
+          toast.success('Placa detectada pela câmera automática!', { id: 'ocr' });
+        } else if (cleanText.length >= 7) {
+          // Último recurso: pega os últimos 7 caracteres para ver se encaixa
+          setPlate(formatPlate(cleanText.slice(-7)));
+          toast.success('Confira se a leitura óptica está totalmente correta.', { id: 'ocr' });
+        } else {
+          toast.error('Texto não legível. Digite a placa manualmente.', { id: 'ocr' });
+        }
+      } catch (e) {
+        console.error('Erro OCR:', e);
+        toast.error('Falha no processador. Digite a placa manualmente.', { id: 'ocr' });
+      }
     }
   };
 
