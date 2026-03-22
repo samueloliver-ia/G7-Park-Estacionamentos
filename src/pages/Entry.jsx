@@ -88,20 +88,49 @@ export default function Entry() {
         const { data: { text } } = await worker.recognize(imageSrc);
         await worker.terminate();
 
-        const cleanText = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+        const rawText = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
         
-        // Expressão resiliente que tenta achar no minimo 3 letras e números depois (Padrão Antigo e Mercosul)
-        const plateMatch = cleanText.match(/[A-Z]{2,3}[A-Z0-9]{4}/);
+        // 1. Procura exata por placa padrão Mercosul (AAA1A12) ou Antiga (AAA1234)
+        const strictMatch = rawText.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/);
+        
+        if (strictMatch) {
+          setPlate(formatPlate(strictMatch[0]));
+          toast.success('Placa detectada perfeitamente!', { id: 'ocr' });
+          return;
+        }
 
-        if (plateMatch) {
-          setPlate(formatPlate(plateMatch[0].slice(0, 7)));
-          toast.success('Placa detectada pela câmera automática!', { id: 'ocr' });
-        } else if (cleanText.length >= 7) {
-          // Último recurso: pega os últimos 7 caracteres para ver se encaixa
-          setPlate(formatPlate(cleanText.slice(-7)));
-          toast.success('Confira se a leitura óptica está totalmente correta.', { id: 'ocr' });
+        // 2. Fallback: Procura string de 7 caracteres mais provável
+        let bestGuess = '';
+        const possiblePlates = rawText.match(/[A-Z0-9]{7}/g);
+        if (possiblePlates && possiblePlates.length > 0) {
+            bestGuess = possiblePlates.find(p => /^[A-Z]{2,3}/.test(p)) || possiblePlates[0];
+        } else if (rawText.length >= 7) {
+            bestGuess = rawText.slice(-7);
+        }
+
+        if (bestGuess.length === 7) {
+            // Corrige confusões comuns e clássicas do OCR para placas Brasileiras
+            let corrected = '';
+            const letToNum = { 'O': '0', 'I': '1', 'Z': '2', 'S': '5', 'G': '6', 'B': '8', 'Q': '0', 'T': '1', 'A': '4' };
+            const numToLet = { '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '6': 'G', '8': 'B', '4': 'A' };
+
+            for (let i = 0; i < 7; i++) {
+                let char = bestGuess[i];
+                if (i <= 2) { // AAA: Primeiros 3 sempre letras
+                   corrected += numToLet[char] || char;
+                } else if (i === 3) { // 1: 4º char sempre número
+                   corrected += letToNum[char] || char;
+                } else if (i === 4) { // A/1: 5º char letra ou numero (Mercosul/Antigo), preservamos cru
+                   corrected += char; 
+                } else { // 12: 6º e 7º char sempre numeros
+                   corrected += letToNum[char] || char;
+                }
+            }
+
+            setPlate(formatPlate(corrected));
+            toast.success('Placa lida (auto-corrigida)! Confira.', { id: 'ocr' });
         } else {
-          toast.error('Texto não legível. Digite a placa manualmente.', { id: 'ocr' });
+            toast.error('Não achei a placa exata. Digite manualmente.', { id: 'ocr' });
         }
       } catch (e) {
         console.error('Erro OCR:', e);
