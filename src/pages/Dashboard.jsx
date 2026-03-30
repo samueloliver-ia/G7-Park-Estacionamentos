@@ -173,12 +173,12 @@ export default function Dashboard() {
             <span style={solidBtnLabel}>ADMIN</span>
           </button>
 
-          <button onClick={() => navigate('/admin')} style={{ ...solidBtnStyle, background: '#3b2f7a' }}>
+          <button onClick={() => navigate('/admin', { state: { section: 'customers', fromDashboard: true } })} style={{ ...solidBtnStyle, background: '#3b2f7a' }}>
             <UserPlus size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />
             <span style={solidBtnLabel}>CLIENTES</span>
           </button>
 
-          <button onClick={() => navigate('/admin')} style={{ ...solidBtnStyle, background: '#0e4a3a' }}>
+          <button onClick={() => navigate('/admin', { state: { section: 'cash', fromDashboard: true } })} style={{ ...solidBtnStyle, background: '#0e4a3a' }}>
             <Wallet size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />
             <span style={solidBtnLabel}>CAIXA</span>
           </button>

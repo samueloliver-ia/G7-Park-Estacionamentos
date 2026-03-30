@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, BarChart2, History, DollarSign, Receipt, Users, Printer, ChevronRight, UserPlus, Crown, Wallet, AlertTriangle } from 'lucide-react';
 import Reports from '../components/admin/Reports';
 import VehicleHistory from '../components/admin/VehicleHistory';
@@ -27,20 +27,37 @@ const SECTIONS = [
 
 export default function Admin() {
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState(null);
+  const location = useLocation();
+  const [activeSection, setActiveSection] = useState(location.state?.section || null);
+
+  // Escuta se houver alguma navegação direta para o /admin com atalhos
+  useEffect(() => {
+    if (location.state?.section) {
+      setActiveSection(location.state.section);
+    }
+  }, [location.state]);
+
+  const handleBack = () => {
+    // Se ele acessou pelo atalho do Dashboard e tentou voltar, vai para o Dashboard, em vez do Menu Admin
+    if (location.state?.fromDashboard) {
+      navigate('/dashboard', { replace: true });
+    } else {
+      setActiveSection(null);
+    }
+  };
 
   const renderSection = () => {
     switch (activeSection) {
-      case 'customers': return <Customers onBack={() => setActiveSection(null)} />;
-      case 'monthly': return <MonthlyPayments onBack={() => setActiveSection(null)} />;
-      case 'cash': return <CashControl onBack={() => setActiveSection(null)} />;
-      case 'debts': return <DebtCollection onBack={() => setActiveSection(null)} />;
-      case 'reports': return <Reports onBack={() => setActiveSection(null)} />;
-      case 'history': return <VehicleHistory onBack={() => setActiveSection(null)} />;
-      case 'pricing': return <Pricing onBack={() => setActiveSection(null)} />;
-      case 'expenses': return <Expenses onBack={() => setActiveSection(null)} />;
-      case 'employees': return <Employees onBack={() => setActiveSection(null)} />;
-      case 'printer': return <PrinterSetup onBack={() => setActiveSection(null)} />;
+      case 'customers': return <Customers onBack={handleBack} />;
+      case 'monthly': return <MonthlyPayments onBack={handleBack} />;
+      case 'cash': return <CashControl onBack={handleBack} />;
+      case 'debts': return <DebtCollection onBack={handleBack} />;
+      case 'reports': return <Reports onBack={handleBack} />;
+      case 'history': return <VehicleHistory onBack={handleBack} />;
+      case 'pricing': return <Pricing onBack={handleBack} />;
+      case 'expenses': return <Expenses onBack={handleBack} />;
+      case 'employees': return <Employees onBack={handleBack} />;
+      case 'printer': return <PrinterSetup onBack={handleBack} />;
       default: return null;
     }
   };
