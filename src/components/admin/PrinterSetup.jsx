@@ -130,11 +130,19 @@ export default function PrinterSetup({ onBack }) {
 
         {/* Browser Support Warning */}
         {!btSupported && (
-          <div className="alert mb-4" style={{ background: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.3)', color: '#f59e0b' }}>
-            <AlertCircle size={20} />
-            <div>
-              <strong>Web Bluetooth não suportado!</strong>
-              <br />Use o Google Chrome ou Microsoft Edge para conectar via Bluetooth.
+          <div className="alert mb-4" style={{ background: 'rgba(239, 68, 68, 0.05)', borderColor: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800', fontSize: '15px' }}>
+              <AlertCircle size={22} strokeWidth={2.5} /> Bloqueio da Apple (iOS) Detectado
+            </div>
+            <div style={{ fontSize: '13px', lineHeight: '1.6', color: 'var(--text-primary)' }}>
+              Dispositivos <strong>iPhone e iPad</strong> bloqueiam conexões Bluetooth pelo Safari ou Chrome. O Web Bluetooth não funciona nestes navegadores devido a restrições nativas da Apple.
+              <br/><br/>
+              <strong style={{ color: '#06b6d4', fontSize: '14px' }}>📱 Como usar no iPhone:</strong><br/>
+              1. Baixe o navegador gratuito <strong>"Bluefy - Web BLE Browser"</strong> na App Store.<br/>
+              2. Acesse o link deste sistema dentro do Bluefy. A impressora funcionará!
+              <br/><br/>
+              <strong style={{ color: '#10b981', fontSize: '14px' }}>🤖 Melhor Solução (Android):</strong><br/>
+              Se puder, utilize um celular ou tablet <strong>Android</strong>. Basta abrir o Google Chrome normalmente e a impressora conectará de forma nativa e super rápida.
             </div>
           </div>
         )}
