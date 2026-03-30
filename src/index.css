@@ -216,3 +216,35 @@ select.form-input {
 .mt-4 { margin-top: 16px; }
 .mb-4 { margin-bottom: 16px; }
 .w-full { width: 100%; }
+
+/* ===== TABLE ===== */
+.table-wrap { 
+  overflow-x: auto; 
+  border-radius: var(--radius-lg); 
+  border: 1px solid var(--border); 
+  background: var(--bg-card); 
+  -webkit-overflow-scrolling: touch; 
+}
+.table { 
+  width: 100%; 
+  border-collapse: collapse; 
+  font-size: 14px; 
+}
+.table th {
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  font-size: 13px;
+}
+.table td { 
+  padding: 16px; 
+  border-bottom: 1px solid var(--border-light); 
+  color: var(--text-primary); 
+  white-space: nowrap; 
+}
+.table tr:last-child td { border-bottom: none; }
+.table tr:hover td { background: var(--bg-hover); }
