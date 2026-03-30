@@ -4,10 +4,10 @@ import { useApp } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { QRCodeSVG } from 'qrcode.react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { ArrowLeft, ScanLine, Printer, DollarSign, Clock, Car, CheckCircle, CreditCard, Banknote, Smartphone, X } from 'lucide-react';
+import { ArrowLeft, ScanLine, Printer, DollarSign, Clock, Car, CheckCircle, CreditCard, Banknote, Smartphone, X, Crown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { differenceInMinutes, format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { printer as btPrinter } from '../lib/bluetooth-printer';
 
 const PAYMENT_METHODS = [
   { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
@@ -17,16 +17,16 @@ const PAYMENT_METHODS = [
 ];
 
 export default function Exit() {
-  const { currentUser, pricingConfig } = useApp();
+  const { currentUser, pricingConfig, parkingConfig } = useApp();
   const navigate = useNavigate();
   const [scanning, setScanning] = useState(false);
   const [vehicle, setVehicle] = useState(null);
+  const [customerInfo, setCustomerInfo] = useState(null);
   const [manualId, setManualId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('dinheiro');
   const [loading, setLoading] = useState(false);
   const [receiptDone, setReceiptDone] = useState(false);
-  const [printReceipt, setPrintReceipt] = useState(false);
-  const scannerRef = useRef(null);
+  const [printReceipt, setPrintReceipt] = useState(true);
   const scannerInstance = useRef(null);
 
   const startScanner = async () => {
@@ -65,6 +65,17 @@ export default function Exit() {
     }
   };
 
+  const checkCustomer = async (plate) => {
+    const { data } = await supabase.from('customers')
+      .select('*')
+      .eq('parking_id', currentUser.parkingId)
+      .ilike('plate', plate)
+      .eq('status', 'ativo')
+      .maybeSingle();
+    setCustomerInfo(data);
+    return data;
+  };
+
   const fetchVehicle = async (id) => {
     const { data, error } = await supabase
       .from('vehicles')
@@ -74,6 +85,7 @@ export default function Exit() {
       .single();
     if (error || !data) { toast.error('Veículo não encontrado ou já saiu!'); return; }
     setVehicle(data);
+    await checkCustomer(data.plate);
   };
 
   const fetchByPlate = async () => {
@@ -87,14 +99,21 @@ export default function Exit() {
       .order('entry_time', { ascending: false })
       .limit(1)
       .single();
-    if (data) setVehicle(data);
-    else toast.error('Veículo não encontrado no pátio!');
+    if (data) {
+      setVehicle(data);
+      await checkCustomer(data.plate);
+    } else {
+      toast.error('Veículo não encontrado no pátio!');
+    }
   };
 
-  const calculateAmount = (v) => {
-    if (!v) return 0;
-    const mins = differenceInMinutes(new Date(), new Date(v.entry_time));
-    const pricing = pricingConfig.find(p => p.category === v.category);
+  const calculateAmount = () => {
+    if (!vehicle) return 0;
+    // Mensalistas são isentos no pátio
+    if (customerInfo?.customer_type === 'mensal') return 0;
+
+    const mins = differenceInMinutes(new Date(), new Date(vehicle.entry_time));
+    const pricing = pricingConfig.find(p => p.category === vehicle.category);
     if (!pricing) return 0;
 
     if (pricing.charge_type === 'diaria') return pricing.price_daily || 0;
@@ -110,19 +129,58 @@ export default function Exit() {
   const handleExit = async () => {
     if (!vehicle) return;
     setLoading(true);
-    const amount = calculateAmount(vehicle);
+    const amount = calculateAmount();
     const exitTime = new Date().toISOString();
     const mins = differenceInMinutes(new Date(), new Date(vehicle.entry_time));
     try {
+      // 1. Atualizar Veículo
       await supabase.from('vehicles').update({
         exit_time: exitTime,
         duration_minutes: mins,
         amount_charged: amount,
-        payment_method: paymentMethod,
+        payment_method: amount > 0 ? paymentMethod : null,
         status: 'saiu',
       }).eq('id', vehicle.id);
+
+      // 2. Registrar no Caixa se teve pagamento > 0
+      if (amount > 0) {
+        await supabase.from('cash_movements').insert([{
+          parking_id: currentUser.parkingId,
+          type: 'entrada',
+          category: 'avulso',
+          description: `Saída Placa ${vehicle.plate}`,
+          amount: amount,
+          payment_method: paymentMethod,
+          reference_id: vehicle.id,
+          reference_type: 'vehicle_exit',
+          movement_date: exitTime.split('T')[0],
+        }]);
+      }
+
       toast.success('Saída registrada!');
-      if (printReceipt) window.print();
+
+      // 3. Imprimir
+      if (printReceipt) {
+        if (btPrinter.connected) {
+          try {
+            await btPrinter.printExitReceipt({
+              parkingName: parkingConfig?.parking_name || 'G7 PARK',
+              plate: vehicle.plate,
+              controlNumber: vehicle.control_number,
+              category: vehicle.category,
+              entryTime: vehicle.entry_time,
+              exitTime: exitTime,
+              duration: mins,
+              amount: amount,
+              paymentMethod: paymentMethod,
+            });
+          } catch (err) { toast.error('Falha ao imprimir Bluetooth!'); }
+        } else {
+          window.print();
+        }
+      }
+
+      setVehicle({ ...vehicle, exit_time: exitTime, duration_minutes: mins, amount_charged: amount });
       setReceiptDone(true);
     } catch {
       toast.error('Erro ao registrar saída!');
@@ -131,7 +189,7 @@ export default function Exit() {
     }
   };
 
-  const amount = calculateAmount(vehicle);
+  const amount = calculateAmount();
   const durationMins = vehicle ? differenceInMinutes(new Date(), new Date(vehicle.entry_time)) : 0;
 
   if (receiptDone) {
@@ -148,9 +206,13 @@ export default function Exit() {
           </div>
           <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px', color: '#10b981' }}>Saída Registrada!</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Placa: <strong style={{ color: 'var(--text-primary)' }}>{vehicle?.plate}</strong></p>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>Valor cobrado: <strong style={{ color: '#f59e0b', fontSize: '22px' }}>R$ {amount.toFixed(2)}</strong></p>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>
+            Valor cobrado: <strong style={{ color: amount > 0 ? '#f59e0b' : '#10b981', fontSize: '22px' }}>
+              {amount === 0 ? 'ISENTO' : `R$ ${amount.toFixed(2)}`}
+            </strong>
+          </p>
           <div className="flex gap-3" style={{ maxWidth: '340px', margin: '0 auto' }}>
-            <button className="btn btn-primary btn-full" onClick={() => { setVehicle(null); setReceiptDone(false); }}>Nova Saída</button>
+            <button className="btn btn-primary btn-full" onClick={() => { setVehicle(null); setCustomerInfo(null); setReceiptDone(false); }}>Nova Saída</button>
             <button className="btn btn-ghost btn-full" onClick={() => navigate('/dashboard')}>Início</button>
           </div>
         </div>
@@ -169,7 +231,6 @@ export default function Exit() {
       <div className="page-content">
         {!vehicle ? (
           <>
-            {/* QR Scanner */}
             {!scanning ? (
               <div className="card" style={{ marginBottom: '16px', textAlign: 'center' }}>
                 <div className="section-title" style={{ justifyContent: 'center' }}><ScanLine size={18} color="#4a8eff" /> Ler QR Code</div>
@@ -188,7 +249,6 @@ export default function Exit() {
               </div>
             )}
 
-            {/* Manual search */}
             <div className="card">
               <div className="section-title">Busca Manual</div>
               <div className="flex gap-2">
@@ -206,12 +266,27 @@ export default function Exit() {
           </>
         ) : (
           <>
-            {/* Vehicle info */}
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="flex justify-between items-center mb-16">
                 <div className="section-title" style={{ margin: 0 }}><Car size={18} color="#4a8eff" /> Veículo</div>
-                <button className="btn btn-ghost btn-sm" onClick={() => setVehicle(null)}><X size={16} /> Trocar</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => { setVehicle(null); setCustomerInfo(null); }}><X size={16} /> Trocar</button>
               </div>
+              
+              {customerInfo && (
+                <div style={{
+                  padding: '10px 14px', borderRadius: '12px', marginBottom: '16px',
+                  background: customerInfo.customer_type === 'mensal' ? 'rgba(139,92,246,0.1)' : 'rgba(245,158,11,0.1)',
+                  border: `1px solid ${customerInfo.customer_type === 'mensal' ? 'rgba(139,92,246,0.3)' : 'rgba(245,158,11,0.3)'}`,
+                  display: 'flex', alignItems: 'center', gap: '8px'
+                }}>
+                  {customerInfo.customer_type === 'mensal' ? <Crown size={18} color="#8b5cf6" /> : <Clock size={18} color="#f59e0b" />}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '700' }}>{customerInfo.name}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Cliente {customerInfo.customer_type === 'mensal' ? 'Mensalista' : 'Diário'}</div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid-2">
                 <div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Placa</div>
@@ -234,36 +309,41 @@ export default function Exit() {
               </div>
             </div>
 
-            {/* Amount */}
-            <div className="card" style={{ marginBottom: '16px', textAlign: 'center', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+            <div className="card" style={{ marginBottom: '16px', textAlign: 'center', background: customerInfo?.customer_type === 'mensal' ? 'rgba(139,92,246,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${customerInfo?.customer_type === 'mensal' ? 'rgba(139,92,246,0.2)' : 'rgba(245,158,11,0.2)'}` }}>
               <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '8px' }}>Valor a Receber</p>
-              <div style={{ fontSize: '44px', fontWeight: '900', color: '#f59e0b', fontFamily: 'var(--font-display)' }}>
-                R$ {amount.toFixed(2)}
-              </div>
+              {customerInfo?.customer_type === 'mensal' ? (
+                <div style={{ fontSize: '32px', fontWeight: '900', color: '#8b5cf6', fontFamily: 'var(--font-display)' }}>
+                  ISENTO (Mensalista)
+                </div>
+              ) : (
+                <div style={{ fontSize: '44px', fontWeight: '900', color: '#f59e0b', fontFamily: 'var(--font-display)' }}>
+                  R$ {amount.toFixed(2)}
+                </div>
+              )}
             </div>
 
-            {/* Payment method */}
-            <div className="card" style={{ marginBottom: '16px' }}>
-              <div className="section-title"><DollarSign size={18} color="#10b981" /> Forma de Pagamento</div>
-              <div className="grid-2">
-                {PAYMENT_METHODS.map(pm => (
-                  <button
-                    key={pm.id}
-                    onClick={() => setPaymentMethod(pm.id)}
-                    style={{
-                      padding: '14px', borderRadius: '12px', border: `2px solid ${paymentMethod === pm.id ? 'var(--success)' : 'var(--border)'}`,
-                      background: paymentMethod === pm.id ? 'var(--success-bg)' : 'var(--bg-input)',
-                      color: paymentMethod === pm.id ? 'var(--success)' : 'var(--text-secondary)',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', transition: 'all 0.2s',
-                    }}
-                  >
-                    <pm.icon size={16} /> {pm.label}
-                  </button>
-                ))}
+            {amount > 0 && (
+              <div className="card" style={{ marginBottom: '16px' }}>
+                <div className="section-title"><DollarSign size={18} color="#10b981" /> Forma de Pagamento</div>
+                <div className="grid-2">
+                  {PAYMENT_METHODS.map(pm => (
+                    <button
+                      key={pm.id}
+                      onClick={() => setPaymentMethod(pm.id)}
+                      style={{
+                        padding: '14px', borderRadius: '12px', border: `2px solid ${paymentMethod === pm.id ? '#10b981' : 'var(--border)'}`,
+                        background: paymentMethod === pm.id ? 'rgba(16,185,129,0.1)' : 'var(--bg-input)',
+                        color: paymentMethod === pm.id ? '#10b981' : 'var(--text-secondary)',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', transition: 'all 0.2s',
+                      }}
+                    >
+                      <pm.icon size={16} /> {pm.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Receipt option */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', padding: '14px 16px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px' }}>
               <input type="checkbox" id="printR" checked={printReceipt} onChange={e => setPrintReceipt(e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
               <label htmlFor="printR" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}>
@@ -273,7 +353,7 @@ export default function Exit() {
 
             <button className="btn btn-danger btn-full btn-lg" onClick={handleExit} disabled={loading}>
               {loading ? <span className="spinner" style={{ width: '22px', height: '22px' }} /> : (
-                <><CheckCircle size={20} /> Confirmar Saída — R$ {amount.toFixed(2)}</>
+                <><CheckCircle size={20} /> Confirmar Saída — {amount === 0 ? 'ISENTO' : `R$ ${amount.toFixed(2)}`}</>
               )}
             </button>
           </>

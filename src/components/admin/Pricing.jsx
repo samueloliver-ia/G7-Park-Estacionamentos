@@ -133,7 +133,7 @@ export default function Pricing({ onBack }) {
           );
         })}
 
-        <button className="btn btn-warning btn-full btn-lg" onClick={handleSave} disabled={loading}>
+        <button className="btn btn-primary btn-full btn-lg" style={{ background: '#f59e0b', boxShadow: '0 4px 12px rgba(245,158,11,0.2)' }} onClick={handleSave} disabled={loading}>
           {loading ? <span className="spinner" style={{ width: '22px', height: '22px' }} /> : <><Save size={20} /> Salvar Preços</>}
         </button>
       </div>

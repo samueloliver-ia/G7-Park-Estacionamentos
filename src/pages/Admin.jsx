@@ -1,20 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, BarChart2, History, DollarSign, Receipt, Users, Printer, ChevronRight } from 'lucide-react';
+import { ArrowLeft, BarChart2, History, DollarSign, Receipt, Users, Printer, ChevronRight, UserPlus, Crown, Wallet, AlertTriangle } from 'lucide-react';
 import Reports from '../components/admin/Reports';
 import VehicleHistory from '../components/admin/VehicleHistory';
 import Pricing from '../components/admin/Pricing';
 import Expenses from '../components/admin/Expenses';
 import Employees from '../components/admin/Employees';
 import PrinterSetup from '../components/admin/PrinterSetup';
+import Customers from '../components/admin/Customers';
+import MonthlyPayments from '../components/admin/MonthlyPayments';
+import CashControl from '../components/admin/CashControl';
+import DebtCollection from '../components/admin/DebtCollection';
 
 const SECTIONS = [
+  { id: 'customers', label: 'Clientes', icon: UserPlus, color: '#8b5cf6', desc: 'Cadastro rápido de clientes' },
+  { id: 'monthly', label: 'Mensalidades', icon: Crown, color: '#a855f7', desc: 'Controle de mensalistas' },
+  { id: 'cash', label: 'Caixa Diário', icon: Wallet, color: '#10b981', desc: 'Entradas, saídas e saldo' },
+  { id: 'debts', label: 'Cobrança', icon: AlertTriangle, color: '#ef4444', desc: 'Lista de inadimplentes · WhatsApp' },
   { id: 'reports', label: 'Relatórios', icon: BarChart2, color: '#4a8eff', desc: 'Diários e semanais com impressão' },
-  { id: 'history', label: 'Histórico', icon: History, color: '#8b5cf6', desc: 'Veículos que passaram pelo pátio' },
+  { id: 'history', label: 'Histórico', icon: History, color: '#64748b', desc: 'Veículos que passaram pelo pátio' },
   { id: 'pricing', label: 'Preços e Cobrança', icon: DollarSign, color: '#f59e0b', desc: 'Configurar tabela de preços' },
-  { id: 'expenses', label: 'Despesas', icon: Receipt, color: '#ef4444', desc: 'Gerenciar despesas do estacionamento' },
-  { id: 'employees', label: 'Funcionários', icon: Users, color: '#10b981', desc: 'Cadastro e gestão de equipe' },
-  { id: 'printer', label: 'Impressora', icon: Printer, color: '#06b6d4', desc: 'Configurar impressora térmica' },
+  { id: 'expenses', label: 'Despesas', icon: Receipt, color: '#f97316', desc: 'Gerenciar despesas do estacionamento' },
+  { id: 'employees', label: 'Funcionários', icon: Users, color: '#06b6d4', desc: 'Cadastro e gestão de equipe' },
+  { id: 'printer', label: 'Impressora', icon: Printer, color: '#6366f1', desc: 'Bluetooth · YQ-8609 · 58mm' },
 ];
 
 export default function Admin() {
@@ -23,6 +31,10 @@ export default function Admin() {
 
   const renderSection = () => {
     switch (activeSection) {
+      case 'customers': return <Customers onBack={() => setActiveSection(null)} />;
+      case 'monthly': return <MonthlyPayments onBack={() => setActiveSection(null)} />;
+      case 'cash': return <CashControl onBack={() => setActiveSection(null)} />;
+      case 'debts': return <DebtCollection onBack={() => setActiveSection(null)} />;
       case 'reports': return <Reports onBack={() => setActiveSection(null)} />;
       case 'history': return <VehicleHistory onBack={() => setActiveSection(null)} />;
       case 'pricing': return <Pricing onBack={() => setActiveSection(null)} />;
