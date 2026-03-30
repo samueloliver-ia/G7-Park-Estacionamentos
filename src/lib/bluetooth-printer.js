@@ -59,17 +59,7 @@ class BluetoothPrinter {
       const serviceUuids = this.ALT_UUIDS.map(u => u.service);
       
       this.device = await navigator.bluetooth.requestDevice({
-        filters: [
-          { namePrefix: 'Printer' },
-          { namePrefix: 'printer' },
-          { namePrefix: 'YQ' },
-          { namePrefix: 'BT' },
-          { namePrefix: 'MPT' },
-          { namePrefix: 'RPP' },
-          { namePrefix: 'PT-' },
-          { namePrefix: 'MTP' },
-          { namePrefix: 'Thermal' },
-        ],
+        acceptAllDevices: true,
         optionalServices: serviceUuids,
       });
 
