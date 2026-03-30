@@ -94,10 +94,11 @@ class BluetoothPrinter {
       throw new Error('Serviço de impressão não encontrado no dispositivo.');
     } catch (err) {
       this.connected = false;
-      if (err.message.includes('cancelled') || err.message.includes('canceled')) {
+      const msg = err?.message || String(err) || 'Erro desconhecido';
+      if (msg.includes('cancelled') || msg.includes('canceled') || msg.includes('User cancelled')) {
         throw new Error('Seleção cancelada pelo usuário.');
       }
-      throw err;
+      throw new Error(`Falha no pareamento: ${msg}`);
     }
   }
 
