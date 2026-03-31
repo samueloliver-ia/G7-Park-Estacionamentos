@@ -59,16 +59,18 @@ export default function Login() {
 
           <form onSubmit={handleLogin}>
             <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label className="form-label">E-mail</label>
+              <label className="form-label">Usuário ou E-mail</label>
               <div style={{ position: 'relative' }}>
                 <Mail size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--brand-blue-light)' }} />
                 <input
-                  type="email"
+                  type="text"
                   className="form-input"
                   style={{ paddingLeft: '48px', height: '52px', borderRadius: '12px' }}
-                  placeholder="admin@exemplo.com"
+                  placeholder="usuario ou email@exemplo.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
+                  autoCapitalize="none"
+                  autoCorrect="off"
                 />
               </div>
             </div>

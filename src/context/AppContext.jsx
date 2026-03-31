@@ -3,6 +3,28 @@ import { supabase } from '../lib/supabase';
 
 const AppContext = createContext(null);
 
+// ─── Permissões por cargo ──────────────────────────────────────────────────
+export const ROLE_PERMISSIONS = {
+  owner:         ['entry', 'exit', 'yard', 'admin', 'customers', 'cash'],
+  administrador: ['entry', 'exit', 'yard', 'admin', 'customers', 'cash'],
+  operador:      ['entry', 'exit', 'yard', 'customers'],
+  caixa:         ['entry', 'exit', 'yard', 'cash'],
+};
+
+export const hasPermission = (role, permission) => {
+  const perms = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS['operador'];
+  return perms.includes(permission);
+};
+
+export const ROLE_LABELS = {
+  owner: 'Proprietário',
+  administrador: 'Administrador',
+  operador: 'Operador',
+  caixa: 'Caixa',
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+
 export function AppProvider({ children }) {
   const [parkingConfig, setParkingConfig] = useState(null);
   const [pricingConfig, setPricingConfig] = useState([]);
@@ -51,24 +73,55 @@ export function AppProvider({ children }) {
     }
   };
 
-  const login = async (email, password) => {
-    const { data, error } = await supabase
+  const login = async (username, password) => {
+    // 1. Tenta como dono (email no parking_config)
+    const { data: owner } = await supabase
       .from('parking_config')
       .select('*')
-      .eq('email', email)
-      .single();
+      .eq('email', username.trim().toLowerCase())
+      .maybeSingle();
 
-    if (error || !data) throw new Error('E-mail não encontrado!');
+    if (owner) {
+      if (owner.password_hash !== password) throw new Error('Senha incorreta!');
+      const userData = {
+        parkingId: owner.id,
+        email: owner.email,
+        name: owner.owner_name,
+        role: 'owner',
+        isOwner: true,
+      };
+      setCurrentUser(userData);
+      setIsAuthenticated(true);
+      localStorage.setItem('g7park_auth', JSON.stringify(userData));
+      await loadParkingData(owner.id);
+      return { ...owner, role: 'owner' };
+    }
 
-    // Verificação simples de senha (em produção use auth do Supabase)
-    if (data.password_hash !== password) throw new Error('Senha incorreta!');
+    // 2. Tenta como funcionário (app_username)
+    const { data: employee } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('app_username', username.trim().toLowerCase())
+      .eq('has_app_access', true)
+      .eq('status', 'ativo')
+      .maybeSingle();
 
-    const userData = { parkingId: data.id, email: data.email, name: data.owner_name };
+    if (!employee) throw new Error('Usuário não encontrado!');
+    if (employee.app_password !== password) throw new Error('Senha incorreta!');
+
+    const userData = {
+      parkingId: employee.parking_id,
+      email: employee.email,
+      name: employee.name,
+      role: employee.role,     // 'administrador' | 'operador' | 'caixa'
+      employeeId: employee.id,
+      isEmployee: true,
+    };
     setCurrentUser(userData);
     setIsAuthenticated(true);
     localStorage.setItem('g7park_auth', JSON.stringify(userData));
-    await loadParkingData(data.id);
-    return data;
+    await loadParkingData(employee.parking_id);
+    return employee;
   };
 
   const logout = () => {
@@ -94,14 +147,13 @@ export function AppProvider({ children }) {
 
     if (error) throw error;
 
-    // Inserir preços padrão
     await supabase.from('pricing_config').insert([
       { parking_id: data.id, category: 'pequeno', charge_type: 'hora', price_per_hour: 5.00, price_first_hour: 5.00, price_additional_hour: 3.00 },
-      { parking_id: data.id, category: 'medio', charge_type: 'hora', price_per_hour: 8.00, price_first_hour: 8.00, price_additional_hour: 5.00 },
-      { parking_id: data.id, category: 'grande', charge_type: 'hora', price_per_hour: 12.00, price_first_hour: 12.00, price_additional_hour: 8.00 },
+      { parking_id: data.id, category: 'medio',   charge_type: 'hora', price_per_hour: 8.00, price_first_hour: 8.00, price_additional_hour: 5.00 },
+      { parking_id: data.id, category: 'grande',  charge_type: 'hora', price_per_hour: 12.00, price_first_hour: 12.00, price_additional_hour: 8.00 },
     ]);
 
-    const userData = { parkingId: data.id, email: data.email, name: data.owner_name };
+    const userData = { parkingId: data.id, email: data.email, name: data.owner_name, role: 'owner', isOwner: true };
     setCurrentUser(userData);
     setIsAuthenticated(true);
     localStorage.setItem('g7park_auth', JSON.stringify(userData));
@@ -113,12 +165,16 @@ export function AppProvider({ children }) {
     if (currentUser?.parkingId) loadParkingData(currentUser.parkingId);
   };
 
+  // Helper de permissão para usar nos componentes
+  const can = (permission) => hasPermission(currentUser?.role || 'operador', permission);
+
   return (
     <AppContext.Provider value={{
       parkingConfig, pricingConfig, printerConfig,
       loading, isAuthenticated, currentUser,
       login, logout, register, refreshData,
       setParkingConfig, setPricingConfig, setPrinterConfig,
+      can,
     }}>
       {children}
     </AppContext.Provider>

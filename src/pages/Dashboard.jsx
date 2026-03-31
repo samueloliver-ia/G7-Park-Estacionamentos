@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
+import { useApp, ROLE_LABELS } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Printer, LogIn, LogOut as LogOutIcon, ParkingSquare, Wrench, Car, Bike, Truck, AlertTriangle, Crown, Wallet, UserPlus, DollarSign } from 'lucide-react';
+import { LogOut, Printer, LogIn, LogOut as LogOutIcon, ParkingSquare, Wrench, Car, Bike, Truck, AlertTriangle, Wallet, UserPlus, Shield } from 'lucide-react';
 import { startOfDay, endOfDay, format } from 'date-fns';
 
 export default function Dashboard() {
-  const { parkingConfig, currentUser, logout } = useApp();
+  const { parkingConfig, currentUser, logout, can } = useApp();
   const navigate = useNavigate();
   const [stats, setStats] = useState({ activeVehicles: 0, todayRevenue: 0, categories: { pequeno: 0, medio: 0, grande: 0 } });
   const [lateCount, setLateCount] = useState(0);
@@ -39,10 +39,66 @@ export default function Dashboard() {
 
   const handleLogout = () => { logout(); navigate('/'); };
 
+  // ── Botões filtrados por permissão ──────────────────────────────────────
+  const allButtons = [
+    {
+      id: 'entry',
+      permission: 'entry',
+      label: 'ENTRADA',
+      icon: <LogIn size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />,
+      bg: '#1B2E6B',
+      action: () => navigate('/entry'),
+    },
+    {
+      id: 'exit',
+      permission: 'exit',
+      label: 'SAÍDA',
+      icon: <LogOutIcon size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />,
+      bg: '#1B2E6B',
+      action: () => navigate('/exit'),
+    },
+    {
+      id: 'yard',
+      permission: 'yard',
+      label: 'PÁTIO',
+      icon: <ParkingSquare size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />,
+      bg: '#1B2E6B',
+      action: () => navigate('/yard'),
+    },
+    {
+      id: 'admin',
+      permission: 'admin',
+      label: 'ADMIN',
+      icon: <Wrench size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />,
+      bg: '#152454',
+      action: () => navigate('/admin'),
+    },
+    {
+      id: 'customers',
+      permission: 'customers',
+      label: 'CLIENTES',
+      icon: <UserPlus size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />,
+      bg: '#3b2f7a',
+      action: () => navigate('/admin', { state: { section: 'customers', fromDashboard: true } }),
+    },
+    {
+      id: 'cash',
+      permission: 'cash',
+      label: 'CAIXA',
+      icon: <Wallet size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />,
+      bg: '#0e4a3a',
+      action: () => navigate('/admin', { state: { section: 'cash', fromDashboard: true } }),
+    },
+  ];
+
+  const visibleButtons = allButtons.filter(btn => can(btn.permission));
+  const isEmployee = currentUser?.isEmployee;
+  const roleBadge = ROLE_LABELS[currentUser?.role] || null;
+
   return (
     <div style={{ minHeight: '100vh', background: '#ffffff', display: 'flex', flexDirection: 'column', fontFamily: 'Poppins, sans-serif' }}>
 
-      {/* ── 1. App Bar (Header) ── */}
+      {/* ── 1. App Bar ── */}
       <div style={{
         background: '#1B2E6B',
         padding: '14px 16px',
@@ -53,9 +109,11 @@ export default function Dashboard() {
           {parkingConfig?.parking_name || 'G7 Park'}
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button onClick={() => navigate('/admin')} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, display: 'flex' }}>
-            <Printer size={22} />
-          </button>
+          {can('admin') && (
+            <button onClick={() => navigate('/admin')} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, display: 'flex' }}>
+              <Printer size={22} />
+            </button>
+          )}
           <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, display: 'flex' }}>
             <LogOut size={22} />
           </button>
@@ -66,12 +124,22 @@ export default function Dashboard() {
       <div style={{
         background: '#f0f2f8',
         padding: '6px 16px',
-        textAlign: 'center',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
         borderBottom: '1px solid #e2e8f0'
       }}>
         <span style={{ color: '#1B2E6B', fontSize: '13px', fontWeight: '500' }}>
           {currentUser?.name || parkingConfig?.owner_name || 'Administrador'}
         </span>
+        {isEmployee && roleBadge && (
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: '3px',
+            fontSize: '11px', fontWeight: '600', padding: '2px 8px', borderRadius: '20px',
+            background: '#1B2E6B18', color: '#1B2E6B',
+          }}>
+            <Shield size={10} />
+            {roleBadge}
+          </span>
+        )}
       </div>
 
       {/* ── 3. Stats Bar ── */}
@@ -101,8 +169,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Alert: Late Payments ── */}
-      {lateCount > 0 && (
+      {/* ── Alert: Mensalidades atrasadas (só para admin) ── */}
+      {lateCount > 0 && can('admin') && (
         <button onClick={() => navigate('/admin')}
           style={{
             display: 'flex', alignItems: 'center', gap: '10px',
@@ -131,13 +199,10 @@ export default function Dashboard() {
       {/* ── Conteúdo Central ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 24px 24px' }}>
 
-        {/* Logo Central (Pin Drop) */}
+        {/* Logo Central */}
         <div style={{
-          width: '80px',
-          height: '80px',
-          background: '#1B2E6B',
-          borderRadius: '24px 24px 24px 4px',
-          transform: 'rotate(-45deg)',
+          width: '80px', height: '80px', background: '#1B2E6B',
+          borderRadius: '24px 24px 24px 4px', transform: 'rotate(-45deg)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           margin: '10px 0 30px',
           boxShadow: '0 12px 24px rgba(27,46,107,0.2)',
@@ -147,42 +212,19 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Grid 3x2 Botões ── */}
+        {/* ── Grid de Botões (filtrado por permissão) ── */}
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px',
+          display: 'grid',
+          gridTemplateColumns: visibleButtons.length <= 3 ? `repeat(${visibleButtons.length}, 1fr)` : '1fr 1fr 1fr',
+          gap: '12px',
           width: '100%', maxWidth: '420px', marginBottom: '20px'
         }}>
-
-          <button onClick={() => navigate('/entry')} style={solidBtnStyle}>
-            <LogIn size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />
-            <span style={solidBtnLabel}>ENTRADA</span>
-          </button>
-
-          <button onClick={() => navigate('/exit')} style={solidBtnStyle}>
-            <LogOutIcon size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />
-            <span style={solidBtnLabel}>SAÍDA</span>
-          </button>
-
-          <button onClick={() => navigate('/yard')} style={solidBtnStyle}>
-            <ParkingSquare size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />
-            <span style={solidBtnLabel}>PÁTIO</span>
-          </button>
-
-          <button onClick={() => navigate('/admin')} style={{ ...solidBtnStyle, background: '#152454' }}>
-            <Wrench size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />
-            <span style={solidBtnLabel}>ADMIN</span>
-          </button>
-
-          <button onClick={() => navigate('/admin', { state: { section: 'customers', fromDashboard: true } })} style={{ ...solidBtnStyle, background: '#3b2f7a' }}>
-            <UserPlus size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />
-            <span style={solidBtnLabel}>CLIENTES</span>
-          </button>
-
-          <button onClick={() => navigate('/admin', { state: { section: 'cash', fromDashboard: true } })} style={{ ...solidBtnStyle, background: '#0e4a3a' }}>
-            <Wallet size={32} color="#fff" strokeWidth={2} style={{ marginBottom: '6px' }} />
-            <span style={solidBtnLabel}>CAIXA</span>
-          </button>
-
+          {visibleButtons.map(btn => (
+            <button key={btn.id} onClick={btn.action} style={{ ...solidBtnStyle, background: btn.bg }}>
+              {btn.icon}
+              <span style={solidBtnLabel}>{btn.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
