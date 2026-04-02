@@ -15,6 +15,39 @@ const ROLE_PERMISSIONS_DESC = {
 
 export default function Employees({ onBack }) {
   const { currentUser } = useApp();
+  const isOwner = currentUser?.isOwner === true;
+
+  // Guarda de segurança: bloqueia acesso de não-proprietários
+  if (!isOwner) {
+    return (
+      <div className="page-wrapper">
+        <div className="bg-animated" />
+        <div className="page-header">
+          <button onClick={onBack} className="btn btn-ghost btn-sm"><ArrowLeft size={16} /></button>
+          <Users size={20} color="#10b981" />
+          <h1 style={{ fontSize: '18px', fontWeight: '700' }}>Funcionários</h1>
+        </div>
+        <div className="page-content">
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', padding: '60px 20px', gap: '16px', textAlign: 'center',
+          }}>
+            <div style={{
+              width: '70px', height: '70px', borderRadius: '20px',
+              background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <KeyRound size={32} color="#ef4444" />
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>Acesso Restrito</div>
+            <div style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '280px' }}>
+              Somente o <strong>proprietário</strong> pode gerenciar funcionários e criar acessos ao sistema.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);

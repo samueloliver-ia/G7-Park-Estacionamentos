@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { Preferences } from '@capacitor/preferences';
 
 const AppContext = createContext(null);
 
@@ -34,15 +35,23 @@ export function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem('g7park_auth');
-    if (stored) {
-      const data = JSON.parse(stored);
-      setCurrentUser(data);
-      setIsAuthenticated(true);
-      loadParkingData(data.parkingId);
-    } else {
-      setLoading(false);
-    }
+    const checkAuth = async () => {
+      try {
+        const { value } = await Preferences.get({ key: 'g7park_auth' });
+        if (value) {
+          const data = JSON.parse(value);
+          setCurrentUser(data);
+          setIsAuthenticated(true);
+          await loadParkingData(data.parkingId);
+        } else {
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Erro auth init:", err);
+        setLoading(false);
+      }
+    };
+    checkAuth();
   }, []);
 
   const loadParkingData = async (parkingId) => {
@@ -92,7 +101,7 @@ export function AppProvider({ children }) {
       };
       setCurrentUser(userData);
       setIsAuthenticated(true);
-      localStorage.setItem('g7park_auth', JSON.stringify(userData));
+      await Preferences.set({ key: 'g7park_auth', value: JSON.stringify(userData) });
       await loadParkingData(owner.id);
       return { ...owner, role: 'owner' };
     }
@@ -119,16 +128,16 @@ export function AppProvider({ children }) {
     };
     setCurrentUser(userData);
     setIsAuthenticated(true);
-    localStorage.setItem('g7park_auth', JSON.stringify(userData));
+    await Preferences.set({ key: 'g7park_auth', value: JSON.stringify(userData) });
     await loadParkingData(employee.parking_id);
     return employee;
   };
 
-  const logout = () => {
+  const logout = async () => {
     setIsAuthenticated(false);
     setCurrentUser(null);
     setParkingConfig(null);
-    localStorage.removeItem('g7park_auth');
+    await Preferences.remove({ key: 'g7park_auth' });
   };
 
   const register = async (formData) => {
@@ -156,7 +165,7 @@ export function AppProvider({ children }) {
     const userData = { parkingId: data.id, email: data.email, name: data.owner_name, role: 'owner', isOwner: true };
     setCurrentUser(userData);
     setIsAuthenticated(true);
-    localStorage.setItem('g7park_auth', JSON.stringify(userData));
+    await Preferences.set({ key: 'g7park_auth', value: JSON.stringify(userData) });
     await loadParkingData(data.id);
     return data;
   };
